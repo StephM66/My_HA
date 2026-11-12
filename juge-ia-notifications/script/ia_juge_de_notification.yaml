@@ -1,0 +1,206 @@
+alias: IA – Juge de notification
+description: >-
+  Décide si un événement mérite de déranger quelqu'un, et comment : notification mobile,
+  annonce vocale ou simple journal. L'IA ne déclenche aucune action. Si elle échoue ou répond
+  de façon illisible, le message de secours part quand même. Tous les réglages sont dans
+  le bloc « Réglages de ta maison », en tête de la séquence.
+icon: mdi:gavel
+mode: queued
+max: 10
+fields:
+  message:
+    name: Message
+    description: Message factuel, envoyé tel quel si l'IA ne répond pas.
+    required: true
+    selector:
+      text:
+        multiline: true
+  contexte:
+    name: Contexte
+    description: Ce qui s'est passé, en clair, pour aider l'IA à juger (facultatif).
+    default: ""
+    selector:
+      text:
+        multiline: true
+  mode_juge:
+    name: Mode
+    description: "juge = l'IA décide ; journal = noter dans la liste sans notifier."
+    default: juge
+    selector:
+      select:
+        options:
+          - juge
+          - journal
+sequence:
+  - alias: Réglages de ta maison (à adapter)
+    variables:
+      ia: ai_task.openai_ai_task
+      notifier_mobile: notify.mobile_app_mon_telephone
+      liste_debrief: todo.debrief_maison
+      lits: []
+      lecteurs: []
+      agenda: ""
+      agenda_heures: 12
+      etiquette_contexte: Contexte IA
+      tts_moteur: ""
+      tts_lecteur: ""
+  - variables:
+      secours: "{{ message | default('', true) | string | trim }}"
+      prochains_evenements: []
+  - alias: Agenda des prochaines heures (facultatif)
+    if:
+      - condition: template
+        value_template: "{{ agenda | default('', true) != '' and mode_juge | default('juge', true) != 'journal' }}"
+    then:
+      - action: calendar.get_events
+        continue_on_error: true
+        target:
+          entity_id: "{{ agenda }}"
+        data:
+          duration:
+            hours: "{{ agenda_heures | int(12) }}"
+        response_variable: reponse_agenda
+      - variables:
+          prochains_evenements: >-
+            {%- set ns = namespace(l=[]) -%}
+            {%- set r = reponse_agenda if reponse_agenda is defined and reponse_agenda is mapping else {} -%}
+            {%- for cal in r.values() if cal is mapping -%}
+              {%- for e in cal.get('events', []) -%}
+                {%- set debut = e.get('start', '') | string -%}
+                {%- set quand = as_local(as_datetime(debut)).strftime('%d/%m %H:%M') if 'T' in debut else debut ~ ' (journée)' -%}
+                {%- set ns.l = ns.l + [quand ~ ' : ' ~ e.get('summary', '')] -%}
+              {%- endfor -%}
+            {%- endfor -%}
+            {{ ns.l[:10] }}
+  - alias: Ce que l'IA sait de la maison (détecté automatiquement)
+    variables:
+      contexte_maison: >-
+        {%- set ns = namespace(p=[], c=[]) -%}
+        {%- for pers in states.person -%}
+          {%- set ou = 'à la maison' if pers.state == 'home' else ('absent' if pers.state == 'not_home' else pers.state) -%}
+          {%- set ns.p = ns.p + [(pers.name, ou)] -%}
+        {%- endfor -%}
+        {%- for e in label_entities(etiquette_contexte) if states(e) not in ['unknown', 'unavailable'] -%}
+          {%- set unite = state_attr(e, 'unit_of_measurement') -%}
+          {%- set ns.c = ns.c + [(state_attr(e, 'friendly_name') or e, state_translated(e) ~ (' ' ~ unite if unite else ''))] -%}
+        {%- endfor -%}
+        {%- set l_lits = ([lits] if lits is string else lits) | reject('eq', '') | list -%}
+        {%- set l_lect = ([lecteurs] if lecteurs is string else lecteurs) | reject('eq', '') | list -%}
+        {{ {
+          'heure': now().strftime('%H:%M'),
+          'jour': ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'][now().weekday()],
+          'nuit': is_state('sun.sun', 'below_horizon'),
+          'personnes': dict(ns.p),
+          'maison_occupee': states.person | selectattr('state', 'eq', 'home') | list | count > 0,
+          'quelquun_dort': l_lits | select('is_state', 'on') | list | count > 0,
+          'film_ou_musique': l_lect | select('is_state', 'playing') | list | count > 0,
+          'agenda': prochains_evenements,
+          'capteurs': dict(ns.c)
+        } }}
+  - alias: Mode journal, sans notification
+    if:
+      - condition: template
+        value_template: "{{ mode_juge | default('juge', true) == 'journal' }}"
+    then:
+      - action: todo.add_item
+        continue_on_error: true
+        target:
+          entity_id: "{{ liste_debrief }}"
+        data:
+          item: "{{ now().strftime('%H:%M') }} — {{ secours }}"
+      - stop: Journalisé sans notification
+  - action: ai_task.generate_data
+    continue_on_error: true
+    response_variable: reponse_ia
+    data:
+      entity_id: "{{ ia }}"
+      task_name: juge_de_notification
+      instructions: |-
+        Tu es un majordome domestique. Tu évalues si un événement de la maison mérite de déranger quelqu'un, et sous quelle forme la plus discrète possible.
+        Tu ne déclenches aucune action ; tu donnes seulement une évaluation.
+        Règles :
+        - Réponds UNIQUEMENT en JSON strict, sans texte autour.
+        - En cas de doute, choisis la forme la moins dérangeante.
+        - N'exagère jamais l'urgence et n'emploie pas de ton impératif.
+        - Sécurité, électricité et météo critique ne sont jamais passées sous silence.
+        - La nuit ou quand quelqu'un dort, pas d'annonce vocale sauf urgence critique.
+        JSON attendu :
+        {"should_notify": boolean, "priority": "low"|"normal"|"high"|"critical",
+         "channels": {"mobile": boolean, "tts": boolean},
+         "message": {"base": "message factuel fourni", "rewritten": "version plus naturelle ou vide", "use_rewrite": boolean},
+         "confidence": nombre entre 0 et 1}
+        MESSAGE : {{ secours }}
+        CONTEXTE : {{ contexte | default('', true) }}
+        MAISON (état actuel : personnes, sommeil, agenda, capteurs choisis) : {{ contexte_maison | to_json }}
+  - alias: Décision vérifiée (secours si l'IA est absente, illisible ou vide)
+    variables:
+      brut: "{{ reponse_ia.data | default('') if reponse_ia is defined and reponse_ia is mapping else '' }}"
+      texte: "{{ brut | string | replace('```json', '') | replace('```', '') | trim }}"
+      lu: >-
+        {%- if '{' in texte and '}' in texte -%}
+          {{ texte[texte.find('{') : texte.rfind('}') + 1] | from_json(default={}) }}
+        {%- else -%}
+          {{ {} }}
+        {%- endif -%}
+      decision: >-
+        {%- set g = lu if lu is mapping else {} -%}
+        {%- set c = g.get('channels') if g.get('channels') is mapping else {} -%}
+        {%- if g.get('should_notify') is boolean -%}
+          {{ dict(g, channels={'mobile': c.get('mobile') is true, 'tts': c.get('tts') is true},
+                  confidence=g.get('confidence', 1) | float(1)) }}
+        {%- else -%}
+          {{ {'should_notify': true, 'priority': 'normal', 'channels': {'mobile': true, 'tts': false},
+              'message': {}, 'confidence': 1, 'secours_ia': true} }}
+        {%- endif -%}
+      texte_final: >-
+        {%- set m = decision.get('message') if decision.get('message') is mapping else {} -%}
+        {%- set r = m.get('rewritten', '') | string | trim if m.get('use_rewrite') is true else '' -%}
+        {{ r if r | length > 0 else secours }}
+  - action: todo.add_item
+    continue_on_error: true
+    target:
+      entity_id: "{{ liste_debrief }}"
+    data:
+      item: "{{ now().strftime('%H:%M') }} — [{{ decision.priority | default('normal') | upper }}] {{ secours }}"
+  - if:
+      - condition: template
+        value_template: "{{ not decision.should_notify }}"
+    then:
+      - stop: L'IA juge que ça peut attendre le débrief
+  - alias: "Confiance faible : notification discrète plutôt que rien"
+    if:
+      - condition: template
+        value_template: "{{ decision.confidence < 0.5 }}"
+    then:
+      - variables:
+          decision: "{{ dict(decision, channels={'mobile': true, 'tts': false}) }}"
+  - variables:
+      voix_possible: >-
+        {{ decision.channels.tts and tts_moteur != '' and tts_lecteur != ''
+           and contexte_maison.maison_occupee
+           and (not contexte_maison.quelquun_dort or decision.priority == 'critical') }}
+  - if:
+      - condition: template
+        value_template: "{{ voix_possible }}"
+    then:
+      - action: tts.speak
+        continue_on_error: true
+        target:
+          entity_id: "{{ tts_moteur }}"
+        data:
+          media_player_entity_id: "{{ tts_lecteur }}"
+          message: "{{ texte_final }}"
+  - alias: Mobile, ou à la place de la voix quand elle est impossible
+    if:
+      - condition: template
+        value_template: "{{ decision.channels.mobile or not voix_possible }}"
+    then:
+      - action: "{{ notifier_mobile }}"
+        continue_on_error: true
+        data:
+          title: Maison
+          message: "{{ texte_final }}"
+          data:
+            push:
+              interruption-level: "{{ 'time-sensitive' if decision.priority in ['high', 'critical'] else 'active' }}"
+            importance: "{{ 'high' if decision.priority in ['high', 'critical'] else 'default' }}"

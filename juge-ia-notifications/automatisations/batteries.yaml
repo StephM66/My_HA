@@ -1,0 +1,23 @@
+alias: Exemple – Piles faibles (journal du soir)
+description: Chaque soir, note les piles sous 20 % dans le journal, sans déranger personne.
+triggers:
+  - trigger: time
+    at: "19:00:00"
+conditions: []
+actions:
+  - variables:
+      faibles: >-
+        {%- set ns = namespace(l=[]) -%}
+        {%- for s in states.sensor | selectattr('attributes.device_class', 'defined')
+              | selectattr('attributes.device_class', 'eq', 'battery')
+              if s.state | is_number and s.state | float < 20 -%}
+          {%- set ns.l = ns.l + [s.name ~ ' (' ~ s.state | int ~ ' %)'] -%}
+        {%- endfor -%}
+        {{ ns.l }}
+  - condition: template
+    value_template: "{{ faibles | count > 0 }}"
+  - action: script.ia_juge_de_notification
+    data:
+      message: "Piles faibles : {{ faibles | join(', ') }}."
+      mode_juge: journal
+mode: single

@@ -1,0 +1,17 @@
+alias: Exemple – Porte d'entrée restée ouverte
+description: Passe l'événement au juge IA, qui décide s'il faut prévenir et comment.
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.porte_entree
+    to: "on"
+    for: "00:05:00"
+conditions: []
+actions:
+  - action: script.ia_juge_de_notification
+    data:
+      message: La porte d'entrée est ouverte depuis 5 minutes.
+      contexte: >-
+        Porte d'entrée ouverte depuis 5 minutes.
+        Alarme : {{ states('alarm_control_panel.alarme') }}.
+        Température extérieure : {{ states('sensor.temperature_exterieure') }} °C.
+mode: single

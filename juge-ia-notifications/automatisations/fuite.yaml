@@ -1,0 +1,15 @@
+alias: Exemple – Fuite d'eau
+description: Une fuite est une urgence ; le juge choisit les canaux, les garde-fous garantissent l'envoi.
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.fuite_evier_cuisine
+    to: "on"
+conditions: []
+actions:
+  - action: script.ia_juge_de_notification
+    data:
+      message: Fuite d'eau détectée sous l'évier de la cuisine.
+      contexte: >-
+        Le détecteur de fuite sous l'évier de la cuisine s'est déclenché.
+        Risque de dégât des eaux : à traiter tout de suite, même la nuit.
+mode: single

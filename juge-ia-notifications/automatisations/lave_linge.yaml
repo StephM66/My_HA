@@ -1,0 +1,16 @@
+alias: Exemple – Lave-linge terminé
+description: Quand la prise du lave-linge retombe sous 5 W, le juge décide s'il faut prévenir.
+triggers:
+  - trigger: numeric_state
+    entity_id: sensor.prise_lave_linge_puissance
+    below: 5
+    for: "00:03:00"
+conditions: []
+actions:
+  - action: script.ia_juge_de_notification
+    data:
+      message: Le lave-linge a terminé.
+      contexte: >-
+        Fin de cycle du lave-linge. Le linge attend d'être étendu : utile à savoir,
+        jamais urgent. Inutile de réveiller quelqu'un pour ça.
+mode: single

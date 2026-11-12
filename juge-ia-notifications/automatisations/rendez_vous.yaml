@@ -1,0 +1,17 @@
+alias: Exemple – Rappel de rendez-vous
+description: Une heure avant chaque événement de l'agenda familial, le juge décide qui prévenir et comment.
+triggers:
+  - trigger: calendar
+    event: start
+    offset: "-1:00:00"
+    entity_id: calendar.famille
+conditions: []
+actions:
+  - action: script.ia_juge_de_notification
+    data:
+      message: "Dans 1 heure : {{ trigger.calendar_event.summary }}."
+      contexte: >-
+        Rappel d'agenda. Événement : {{ trigger.calendar_event.summary }}.
+        Lieu : {{ trigger.calendar_event.location | default('non précisé', true) }}.
+        Si personne n'est à la maison, le mobile suffit.
+mode: queued
