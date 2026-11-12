@@ -1,0 +1,11 @@
+alias: Débrief du soir
+description: Chaque soir, le majordome raconte ce qu'il a gardé pour plus tard.
+triggers:
+  - trigger: time
+    at: "21:00:00"
+conditions: []
+actions:
+  - action: script.ia_debrief
+    data:
+      canal: auto
+mode: single

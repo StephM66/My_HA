@@ -1,0 +1,45 @@
+alias: Mon annonce vocale
+description: >-
+  Exemple de script d'annonce pour le juge. Il reçoit message et priorite, et répond
+  {"played": false} quand l'annonce n'a pas pu passer : le juge envoie alors un message.
+fields:
+  message:
+    name: Message
+    required: true
+    selector:
+      text:
+        multiline: true
+  priorite:
+    name: Priorité
+    default: normal
+    selector:
+      text: {}
+sequence:
+  - if:
+      - condition: state
+        entity_id: media_player.salon
+        state: unavailable
+    then:
+      - variables:
+          resultat:
+            played: false
+            reason: enceinte du salon indisponible
+      - stop: Annonce impossible
+        response_variable: resultat
+  - action: media_player.volume_set
+    target:
+      entity_id: media_player.salon
+    data:
+      volume_level: "{{ 0.7 if priorite == 'critical' else 0.4 }}"
+  - action: tts.speak
+    target:
+      entity_id: tts.google_translate_fr_fr
+    data:
+      media_player_entity_id: media_player.salon
+      message: "{{ message }}"
+  - variables:
+      resultat:
+        played: true
+  - stop: Annonce faite
+    response_variable: resultat
+mode: queued

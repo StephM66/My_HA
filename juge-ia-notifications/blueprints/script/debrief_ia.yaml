@@ -1,0 +1,172 @@
+blueprint:
+  name: IA – Débrief
+  description: >-
+    Lit le journal tenu par le juge, demande à l'IA d'en faire un récit court et naturel,
+    le diffuse par les canaux du juge (voix si quelqu'un est là, sinon messages), puis vide
+    le journal. Nommez le script « IA – Débrief » pour obtenir script.ia_debrief.
+  domain: script
+  author: DomoS
+  source_url: https://github.com/StephM66/My_HA/blob/main/juge-ia-notifications/blueprints/script/debrief_ia.yaml
+  homeassistant:
+    min_version: "2025.8.0"
+  input:
+    essentiel:
+      name: L'essentiel
+      icon: mdi:cog
+      input:
+        ia:
+          name: IA
+          selector:
+            entity:
+              filter:
+                - domain: ai_task
+        journal:
+          name: Journal du jour
+          description: La même liste que celle du juge.
+          selector:
+            entity:
+              filter:
+                - domain: todo
+        juge:
+          name: Script juge
+          description: Le script créé avec le blueprint « IA – Juge de notification » ; il porte les canaux.
+          default: script.ia_juge_de_notification
+          selector:
+            entity:
+              filter:
+                - domain: script
+    style:
+      name: Style et journal
+      icon: mdi:text-box-edit
+      collapsed: true
+      input:
+        consignes:
+          name: Consignes de style
+          default: Ton chaleureux et posé, cinq phrases au plus, en commençant par le plus important.
+          selector:
+            text:
+              multiline: true
+        vider:
+          name: Après le débrief
+          default: supprimer
+          selector:
+            select:
+              options:
+                - label: Supprimer les lignes racontées
+                  value: supprimer
+                - label: Les cocher (garder l'historique)
+                  value: cocher
+                - label: Ne rien toucher
+                  value: garder
+        silence_si_vide:
+          name: Se taire si le journal est vide
+          default: true
+          selector:
+            boolean: {}
+mode: single
+fields:
+  canal:
+    name: Canal
+    description: auto = la voix si quelqu'un est là et éveillé, sinon un message ; message ; les_deux.
+    default: auto
+    selector:
+      select:
+        options:
+          - auto
+          - message
+          - les_deux
+sequence:
+  - alias: Réglages choisis dans le blueprint
+    variables:
+      ia: !input ia
+      journal: !input journal
+      juge: !input juge
+      consignes: !input consignes
+      vider: !input vider
+      silence_si_vide: !input silence_si_vide
+      brut: ""
+  - action: todo.get_items
+    continue_on_error: true
+    target:
+      entity_id: "{{ journal }}"
+    data:
+      status: needs_action
+    response_variable: reponse_journal
+  - variables:
+      elements: >-
+        {%- set r = reponse_journal if reponse_journal is defined and reponse_journal is mapping else {} -%}
+        {%- set j = r.get(journal) if r.get(journal) is mapping else {} -%}
+        {{ j.get('items', []) | list }}
+  - if:
+      - condition: template
+        value_template: "{{ elements | count == 0 and silence_si_vide }}"
+    then:
+      - stop: Rien à raconter
+  - alias: Récit par l'IA
+    if:
+      - condition: template
+        value_template: "{{ elements | count > 0 }}"
+    then:
+      - action: ai_task.generate_data
+        continue_on_error: true
+        response_variable: reponse_ia
+        data:
+          entity_id: "{{ ia }}"
+          task_name: debrief_maison
+          instructions: |-
+            Tu es le majordome de la maison. Raconte les événements du journal ci-dessous ; ton texte sera lu à voix haute.
+            Règles :
+            - Texte simple et naturel : pas de liste, de titre, d'emoji ni de mise en forme.
+            - Commence par ce qui demande encore une action, puis regroupe les événements semblables.
+            - Les lignes « gardé » et « JOURNAL » n'ont encore été annoncées à personne : ce sont elles qui comptent.
+            - Les lignes « notifié » sont déjà connues : une demi-phrase suffit, ou rien.
+            - N'invente rien et ne donne aucun conseil non demandé.
+            Style : {{ consignes }}
+            Heure actuelle : {{ now().strftime('%H:%M') }}
+            JOURNAL :
+            {% for e in elements %}- {{ e.summary }}
+            {% endfor %}
+      - variables:
+          brut: >-
+            {{ reponse_ia.data | string | trim
+               if reponse_ia is defined and reponse_ia is mapping and reponse_ia.data is string else '' }}
+  - variables:
+      texte: >-
+        {%- if brut != '' -%}
+          {{ brut }}
+        {%- elif elements | count == 0 -%}
+          Rien à signaler aujourd'hui.
+        {%- else -%}
+          Débrief : {{ elements | count }} événement(s). {{ elements | map(attribute='summary') | join(' ; ') | truncate(700) }}
+        {%- endif -%}
+  - alias: Diffusion par les canaux du juge (sans IA ni journal)
+    action: "{{ juge }}"
+    continue_on_error: true
+    data:
+      message: "{{ texte }}"
+      mode_juge: diffuser
+      canal: "{{ canal | default('auto', true) }}"
+      priorite: low
+  - alias: Vider le journal raconté
+    if:
+      - condition: template
+        value_template: "{{ vider != 'garder' and elements | count > 0 }}"
+    then:
+      - repeat:
+          for_each: "{{ elements }}"
+          sequence:
+            - action: todo.update_item
+              continue_on_error: true
+              target:
+                entity_id: "{{ journal }}"
+              data:
+                item: "{{ repeat.item.uid }}"
+                status: completed
+      - if:
+          - condition: template
+            value_template: "{{ vider == 'supprimer' }}"
+        then:
+          - action: todo.remove_completed_items
+            continue_on_error: true
+            target:
+              entity_id: "{{ journal }}"

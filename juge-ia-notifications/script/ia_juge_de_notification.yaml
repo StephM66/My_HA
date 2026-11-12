@@ -42,6 +42,7 @@ sequence:
       agenda: ""
       agenda_heures: 12
       etiquette_contexte: Contexte IA
+      regles_maison: ""
       tts_moteur: ""
       tts_lecteur: ""
   - variables:
@@ -107,7 +108,7 @@ sequence:
         target:
           entity_id: "{{ liste_debrief }}"
         data:
-          item: "{{ now().strftime('%H:%M') }} — {{ secours }}"
+          item: "{{ now().strftime('%H:%M') }} — [JOURNAL] {{ secours }}"
       - stop: Journalisé sans notification
   - action: ai_task.generate_data
     continue_on_error: true
@@ -124,6 +125,10 @@ sequence:
         - N'exagère jamais l'urgence et n'emploie pas de ton impératif.
         - Sécurité, électricité et météo critique ne sont jamais passées sous silence.
         - La nuit ou quand quelqu'un dort, pas d'annonce vocale sauf urgence critique.
+        {%- if regles_maison | default('', true) | trim != '' %}
+        Règles propres à cette maison (prioritaires sur les précédentes, sauf la sécurité) :
+        {{ regles_maison | trim }}
+        {%- endif %}
         JSON attendu :
         {"should_notify": boolean, "priority": "low"|"normal"|"high"|"critical",
          "channels": {"mobile": boolean, "tts": boolean},
@@ -161,7 +166,9 @@ sequence:
     target:
       entity_id: "{{ liste_debrief }}"
     data:
-      item: "{{ now().strftime('%H:%M') }} — [{{ decision.priority | default('normal') | upper }}] {{ secours }}"
+      item: >-
+        {{ now().strftime('%H:%M') }} — [{{ decision.priority | default('normal') | upper }} ·
+        {{ 'notifié' if decision.should_notify else 'gardé' }}] {{ secours }}
   - if:
       - condition: template
         value_template: "{{ not decision.should_notify }}"

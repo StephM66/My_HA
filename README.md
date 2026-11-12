@@ -4,7 +4,7 @@ Projets Home Assistant, prêts à copier dans l'interface et à adapter à votre
 
 | Projet | Description |
 |---|---|
-| [Juge IA des notifications](juge-ia-notifications/) | Une IA (AI Task) décide si, quand et comment notifier : mobile, voix ou journal. Avec des garde-fous et un contexte maison détecté automatiquement. |
+| [Juge IA des notifications](juge-ia-notifications/) | Le cerveau des notifications : une IA (AI Task) décide si, quand et comment prévenir, puis diffuse par vos canaux (voix, téléphones, Telegram…) avec replis. Le débrief raconte le soir ce qui a été gardé. Blueprints importables en un clic. |
 
 Chaque projet a son README : prérequis, installation pas à pas, réglages.
 

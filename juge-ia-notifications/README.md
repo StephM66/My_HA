@@ -11,6 +11,20 @@ L'IA ne pilote rien : elle donne un avis en JSON, et le script applique des gard
 
 Le contexte de la maison est construit **automatiquement** : personnes et zones, sommeil, média en cours, agenda, et toute entité portant l'étiquette « Contexte IA ».
 
+## Installation rapide : les blueprints (recommandé)
+
+[![Importer le juge](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FStephM66%2FMy_HA%2Fblob%2Fmain%2Fjuge-ia-notifications%2Fblueprints%2Fscript%2Fjuge_ia_notification.yaml) **Juge** : décide, puis diffuse par les canaux choisis (voix, téléphones, Telegram…), chacun avec son repli.
+
+[![Importer le débrief](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FStephM66%2FMy_HA%2Fblob%2Fmain%2Fjuge-ia-notifications%2Fblueprints%2Fscript%2Fdebrief_ia.yaml) **Débrief** : raconte ce que le juge a gardé pour plus tard, puis vide le journal.
+
+1. Créez un script depuis le blueprint juge, nommé **« IA – Juge de notification »** (`script.ia_juge_de_notification`).
+2. Créez un script depuis le blueprint débrief, nommé **« IA – Débrief »** (`script.ia_debrief`).
+3. Ajoutez [`automatisations/debrief_soir.yaml`](automatisations/debrief_soir.yaml) et/ou [`automatisations/debrief_retour.yaml`](automatisations/debrief_retour.yaml).
+
+Modes du juge : `juge` (l'IA décide), `journal` (noter sans notifier), `diffuser` (envoyer directement, sans IA). Votre propre script d'annonce peut servir de canal vocal : voir [`exemples/script_annonce_perso.yaml`](exemples/script_annonce_perso.yaml).
+
+Les sections suivantes décrivent la version script simple, sans blueprint.
+
 ## Contenu
 
 | Fichier | Rôle |
@@ -21,6 +35,11 @@ Le contexte de la maison est construit **automatiquement** : personnes et zones,
 | [`automatisations/fuite.yaml`](automatisations/fuite.yaml) | fuite d'eau (urgence) |
 | [`automatisations/rendez_vous.yaml`](automatisations/rendez_vous.yaml) | rappel une heure avant un événement d'agenda |
 | [`automatisations/batteries.yaml`](automatisations/batteries.yaml) | piles faibles notées au journal chaque soir, sans IA |
+| [`blueprints/script/juge_ia_notification.yaml`](blueprints/script/juge_ia_notification.yaml) | blueprint juge (canaux et replis) |
+| [`blueprints/script/debrief_ia.yaml`](blueprints/script/debrief_ia.yaml) | blueprint débrief |
+| [`automatisations/debrief_soir.yaml`](automatisations/debrief_soir.yaml) | débrief chaque soir |
+| [`automatisations/debrief_retour.yaml`](automatisations/debrief_retour.yaml) | débrief au retour à la maison |
+| [`exemples/script_annonce_perso.yaml`](exemples/script_annonce_perso.yaml) | script d'annonce compatible avec le juge |
 | [`exemples/capteur_quelqu_un_dort.jinja`](exemples/capteur_quelqu_un_dort.jinja) | modèle d'un capteur « Quelqu'un dort » |
 
 ## Prérequis

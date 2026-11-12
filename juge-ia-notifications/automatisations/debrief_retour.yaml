@@ -1,0 +1,13 @@
+alias: Débrief au retour à la maison
+description: Quand la première personne rentre, le majordome raconte ce qui s'est passé en son absence.
+triggers:
+  - trigger: numeric_state
+    entity_id: zone.home
+    above: 0
+    for: "00:02:00"
+conditions: []
+actions:
+  - action: script.ia_debrief
+    data:
+      canal: auto
+mode: single
